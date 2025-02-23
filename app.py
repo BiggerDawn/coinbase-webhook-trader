@@ -1,50 +1,44 @@
 from flask import Flask, request, jsonify
-import hmac
-import hashlib
+import requests
 import os
 
 app = Flask(__name__)
 
-# Your Coinbase webhook secret (Get this from Coinbase Webhook Portal)
-COINBASE_WEBHOOK_SECRET = os.getenv("COINBASE_WEBHOOK_SECRET")
+# Coinbase API Keys (Use Koyeb secrets instead of hardcoding these)
+COINBASE_API_KEY = os.getenv("COINBASE_API_KEY")
+COINBASE_API_SECRET = os.getenv("COINBASE_API_SECRET")
+COINBASE_API_URL = "https://api.coinbase.com/v2/orders"  # Adjust if using Advanced Trade API
 
-def verify_coinbase_signature(request):
-    """Verifies the HMAC-SHA256 signature from Coinbase to ensure it's authentic."""
-    signature = request.headers.get("x-coinbase-signature")
-    if not signature:
-        return False
-
-    # Coinbase sends the webhook ID as the key, request body as payload
-    webhook_id = COINBASE_WEBHOOK_SECRET.encode('utf-8')
-    payload = request.data  # Raw request body
-    
-    # Generate HMAC signature
-    h = hmac.new(webhook_id, payload, hashlib.sha256)
-    
-    # Compare the expected vs calculated signatures
-    return hmac.compare_digest(h.hexdigest(), signature)
+def place_order(side, product_id, size):
+    """Places an order on Coinbase"""
+    headers = {
+        "CB-ACCESS-KEY": COINBASE_API_KEY,
+        "CB-ACCESS-SIGN": COINBASE_API_SECRET,
+        "Content-Type": "application/json",
+    }
+    data = {
+        "side": side,
+        "product_id": product_id,  # e.g., "BTC-USD"
+        "size": size,  # Amount to buy/sell
+        "type": "market",  # You can change to limit
+    }
+    response = requests.post(COINBASE_API_URL, json=data, headers=headers)
+    return response.json()
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Coinbase Webhook Listener Running!", 200
+    return "Webhook Server Running!", 200
 
-@app.route("/coinbase-webhook", methods=["POST"])
-def coinbase_webhook():
-    """Handles incoming Coinbase webhook events"""
-    if not verify_coinbase_signature(request):
-        return jsonify({"error": "Unauthorized"}), 401
-
+@app.route("/webhook", methods=["POST"])
+def webhook():
     data = request.json
-    print("Received Coinbase Webhook:", data)  # Debugging Log
-    
-    event_type = data.get("eventType", "")
-
-    if event_type == "transaction":
-        # Here, you can trigger any logic you want
-        print(f"Trade executed: {data}")
-        return jsonify({"message": "Trade processed"}), 200
-
-    return jsonify({"message": "Event received"}), 200
+    if "action" in data and "ticker" in data:
+        side = "buy" if data["action"] == "buy" else "sell"
+        product_id = f"{data['ticker']}-USD"  # Assuming USD pairing
+        size = data.get("size", 0.01)  # Default trade size
+        response = place_order(side, product_id, size)
+        return jsonify(response)
+    return jsonify({"error": "Invalid data"}), 400
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
