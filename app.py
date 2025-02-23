@@ -1,41 +1,62 @@
 from flask import Flask, request, jsonify
-import os
 from coinbase_advanced_trader.enhanced_rest_client import EnhancedRESTClient
+import os
+import hmac
+import hashlib
 
 app = Flask(__name__)
 
-# Coinbase API Keys (Stored securely in Koyeb)
-API_KEY = os.getenv("COINBASE_API_KEY")
-API_SECRET = os.getenv("COINBASE_API_SECRET")
+# Initialize Coinbase client
+client = EnhancedRESTClient(
+    api_key=os.getenv('COINBASE_API_KEY'),
+    api_secret=os.getenv('COINBASE_API_SECRET')
+)
 
-# Initialize the Coinbase Advanced Trade Client
-client = EnhancedRESTClient(api_key=API_KEY, api_secret=API_SECRET)
+# Get webhook secret from environment
+WEBHOOK_SECRET = os.getenv('TRADINGVIEW_SECRET')
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Webhook Server Running!", 200
+@app.route('/webhook', methods=['POST'])
+def handle_webhook():
+    try:
+        # Verify signature
+        signature = request.headers.get('tv-signature')
+        payload = request.get_data(as_text=True)
+        
+        if not verify_signature(payload, signature):
+            return jsonify({"status": "error", "message": "Invalid signature"}), 401
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
+        data = request.json
+        action = data.get('action').lower()
+        product_id = data.get('product_id')
+        amount = data.get('amount')
+        order_type = data.get('type', 'market').lower()
 
-    if "action" in data and "ticker" in data:
-        side = "buy" if data["action"] == "buy" else "sell"
-        product_id = f"{data['ticker']}-USD"  # Assuming USD pairing
-        size = str(data.get("size", "10"))  # Default trade size: $10
+        # Execute trade
+        if action == 'buy':
+            if order_type == 'market':
+                result = client.fiat_market_buy(product_id, amount)
+            elif order_type == 'limit':
+                price = data.get('price')
+                result = client.fiat_limit_buy(product_id, amount, price)
+        elif action == 'sell':
+            if order_type == 'market':
+                result = client.fiat_market_sell(product_id, amount)
+            elif order_type == 'limit':
+                price = data.get('price')
+                result = client.fiat_limit_sell(product_id, amount, price)
+        else:
+            return jsonify({"status": "error", "message": "Invalid action"}), 400
 
-        try:
-            if side == "buy":
-                response = client.fiat_market_buy(product_id, size)
-            else:
-                response = client.fiat_market_sell(product_id, size)
+        return jsonify({"status": "success", "result": result}), 200
 
-            return jsonify(response)
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-    return jsonify({"error": "Invalid data"}), 400
+def verify_signature(payload, signature):
+    if not WEBHOOK_SECRET or not signature:
+        return False
+    digest = hmac.new(WEBHOOK_SECRET.encode(), msg=payload.encode(), digestmod=hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, signature)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-#test to see if the code works
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

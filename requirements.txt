@@ -1,4 +1,4 @@
-flask
-requests
-gunicorn
-coinbase-advancedtrade-python
+flask==3.0.2
+coinbase-advancedtrade-python>=0.1.0
+cryptography==42.0.5
+requests==2.31.0
