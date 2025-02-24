@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import os
 from coinbase_advanced_trader.enhanced_rest_client import EnhancedRESTClient
 
-app = Flask(__name__)  # ✅ Ensure Flask app is defined first
+app = Flask(__name__)
 
 # Load API credentials from environment variables
 API_KEY = os.getenv("COINBASE_API_KEY")
@@ -19,30 +19,14 @@ def home():
 def webhook():
     data = request.json
     if "action" in data and "ticker" in data and "size" in data:
-        side = "BUY" if data["action"] == "buy" else "SELL"
+        side = "buy" if data["action"] == "buy" else "sell"
         product_id = f"{data['ticker']}-USDC"  # Assuming USDC pairing
         size = data["size"]
 
         try:
-            # 🔹 Fetch the current market price
-            product_info = client.get_product(product_id)
-            current_price = float(product_info["price"])
-
-            # 🔹 Adjust the limit price closer to market price
-            price_multiplier = 0.999 if side == "BUY" else 1.001
-            limit_price = round(current_price * price_multiplier, 6)  # 6 decimal places
-
-            # 🔹 Place the limit order using create_limit_order()
-            response = client.create_limit_order(
-                product_id=product_id,
-                side=side,
-                order_configuration={
-                    "limit_limit_gtc": {
-                        "base_size": str(size),
-                        "limit_price": str(limit_price)
-                    }
-                }
-            )
+            # Set limit price dynamically (e.g., 1% below current price)
+            price_multiplier = 0.99 if side == "buy" else 1.01
+            response = client.fiat_limit_buy(product_id, size, price_multiplier=price_multiplier)
 
             return jsonify(response), 200
         except Exception as e:
