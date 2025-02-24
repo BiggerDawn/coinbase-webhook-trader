@@ -1,3 +1,20 @@
+from flask import Flask, request, jsonify
+import os
+from coinbase_advanced_trader.enhanced_rest_client import EnhancedRESTClient
+
+app = Flask(__name__)  # ✅ Define app BEFORE using @app.route
+
+# Load API credentials from environment variables
+API_KEY = os.getenv("COINBASE_API_KEY")
+API_SECRET = os.getenv("COINBASE_API_SECRET")
+
+# Initialize Coinbase client
+client = EnhancedRESTClient(api_key=API_KEY, api_secret=API_SECRET)
+
+@app.route("/", methods=["GET"])
+def home():
+    return "Webhook Server Running!", 200
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -23,3 +40,6 @@ def webhook():
             return jsonify({"error": str(e)}), 500
 
     return jsonify({"error": "Invalid data"}), 400
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
