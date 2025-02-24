@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import os
 from coinbase_advanced_trader.enhanced_rest_client import EnhancedRESTClient
 
-app = Flask(__name__)  # ✅ Define app BEFORE using @app.route
+app = Flask(__name__)  # ✅ Ensure Flask app is defined first
 
 # Load API credentials from environment variables
 API_KEY = os.getenv("COINBASE_API_KEY")
@@ -19,21 +19,30 @@ def home():
 def webhook():
     data = request.json
     if "action" in data and "ticker" in data and "size" in data:
-        side = "buy" if data["action"] == "buy" else "sell"
+        side = "BUY" if data["action"] == "buy" else "SELL"
         product_id = f"{data['ticker']}-USDC"  # Assuming USDC pairing
         size = data["size"]
 
         try:
-            # 🔹 Fetch the current price from Coinbase
+            # 🔹 Fetch the current market price
             product_info = client.get_product(product_id)
             current_price = float(product_info["price"])
 
-            # 🔹 Set limit price closer to market price (0.1% instead of 1%)
-            price_multiplier = 0.999 if side == "buy" else 1.001
-            limit_price = round(current_price * price_multiplier, 6)  # 6 decimals for precision
+            # 🔹 Adjust the limit price closer to market price
+            price_multiplier = 0.999 if side == "BUY" else 1.001
+            limit_price = round(current_price * price_multiplier, 6)  # 6 decimal places
 
-            # 🔹 Place the limit order
-            response = client.fiat_limit_buy(product_id, size, price=limit_price) if side == "buy" else client.fiat_limit_sell(product_id, size, price=limit_price)
+            # 🔹 Place the limit order using create_limit_order()
+            response = client.create_limit_order(
+                product_id=product_id,
+                side=side,
+                order_configuration={
+                    "limit_limit_gtc": {
+                        "base_size": str(size),
+                        "limit_price": str(limit_price)
+                    }
+                }
+            )
 
             return jsonify(response), 200
         except Exception as e:
