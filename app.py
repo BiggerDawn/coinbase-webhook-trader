@@ -28,10 +28,14 @@ def webhook():
             product_info = client.get_product(product_id)
             current_price = float(product_info["price"])
 
-            # Set limit price dynamically (slightly above for buy, slightly below for sell)
-            limit_price = round(current_price * (1.0005 if side == "buy" else 0.9995), 2)
+            # Calculate price_multiplier (1.0005 for buy, 0.9995 for sell)
+            price_multiplier = 1.0005 if side == "buy" else 0.9995
 
-            response = client.fiat_limit_buy(product_id, size, price=limit_price)
+            # Place limit order using price_multiplier
+            if side == "buy":
+                response = client.fiat_limit_buy(product_id, size, price_multiplier=str(price_multiplier))
+            else:
+                response = client.fiat_limit_sell(product_id, size, price_multiplier=str(price_multiplier))
 
             return jsonify(response), 200
         except Exception as e:
