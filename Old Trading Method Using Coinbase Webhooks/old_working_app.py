@@ -21,6 +21,7 @@ def webhook():
     if "action" in data and "ticker" in data and "size" in data:
         side = "buy" if data["action"] == "buy" else "sell"
         product_id = f"{data['ticker']}-USDC"  # Assuming USDC pairing
+        size = data["size"]
 
         try:
             # Fetch the current market price
@@ -32,11 +33,9 @@ def webhook():
 
             # Place limit order using price_multiplier
             if side == "buy":
-                response = client.fiat_limit_buy(product_id, data["size"], price_multiplier=str(price_multiplier))
+                response = client.fiat_limit_buy(product_id, size, price_multiplier=str(price_multiplier))
             else:
-                # Retrieve the full crypto balance for the given ticker to sell everything
-                full_balance = client.get_crypto_balance(data["ticker"])
-                response = client.fiat_limit_sell(product_id, str(full_balance), price_multiplier=str(price_multiplier))
+                response = client.fiat_limit_sell(product_id, size, price_multiplier=str(price_multiplier))
 
             return jsonify(response), 200
         except Exception as e:
