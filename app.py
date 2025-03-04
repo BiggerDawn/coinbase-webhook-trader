@@ -20,11 +20,15 @@ def webhook():
     data = request.json
     if "action" in data and "ticker" in data and "size" in data:
         side = "buy" if data["action"] == "buy" else "sell"
-        product_id = f"{data['ticker']}-USDC"  # Assuming USDC pairing
+        
+        # Ensure ticker format is correct
+        ticker = data["ticker"]
+        if not ticker.endswith("-USDC"):  
+            ticker = f"{ticker}-USDC"  
 
         try:
             # Fetch the current market price
-            product_info = client.get_product(product_id)
+            product_info = client.get_product(ticker)
             current_price = float(product_info["price"])
 
             # Calculate price_multiplier (1.0005 for buy, 0.9995 for sell)
@@ -32,11 +36,12 @@ def webhook():
 
             # Place limit order using price_multiplier
             if side == "buy":
-                response = client.fiat_limit_buy(product_id, data["size"], price_multiplier=str(price_multiplier))
+                response = client.fiat_limit_buy(ticker, data["size"], price_multiplier=str(price_multiplier))
             else:
-                # Retrieve the full crypto balance for the given ticker to sell everything
-                full_balance = client.get_crypto_balance(data["ticker"])
-                response = client.fiat_limit_sell(product_id, str(full_balance), price_multiplier=str(price_multiplier))
+                # Retrieve full crypto balance for the given ticker to sell everything
+                base_currency = ticker.split("-")[0]  # Extract "BTC" from "BTC-USDC"
+                full_balance = client.get_crypto_balance(base_currency)
+                response = client.fiat_limit_sell(ticker, str(full_balance), price_multiplier=str(price_multiplier))
 
             return jsonify(response), 200
         except Exception as e:
